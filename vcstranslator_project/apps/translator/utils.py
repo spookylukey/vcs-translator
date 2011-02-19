@@ -15,13 +15,50 @@ class BaseTranslator(object):
             raise CantHandleYet
         return meth(command)
 
+class BzrTranslator(BaseTranslator):
+    def parse(self, command):
+        parts = command.split()
+        if parts == ["pull"]:
+            return Fetch()
+        elif parts == ["commit"]:
+            return Commit(files=Commit.ALL, push=False)
+        elif parts == ["push"]:
+            return Push()
+
+    def translate_init(self, command):
+        return "bzr init"
+
+    def translate_clone(self, command):
+        return "bzr branch"
+
+    def translate_status(self, command):
+        return "bzr status"
+
+    def translate_pull(self, command):
+        return "bzr pull"
+
+    def translate_push(self, command):
+        return "bzr push"
+
+    def translate_diff(self, command):
+        return "bzr diff"
+
+    def translate_help(self, command):
+        if command.useless:
+            raise CantHandle
+
+
 class GitTranslator(BaseTranslator):
     def parse(self, command):
         parts = command.split()
-        if parts == ["init"]:
+        if not parts:
+            return Help()
+        elif parts == ["init"]:
             return Init()
         elif parts == ["pull"]:
             return Pull()
+        elif parts == ["fetch"]:
+            return Fetch()
         elif parts == ["clone"]:
             return Clone()
         elif parts == ["status"]:
@@ -32,6 +69,8 @@ class GitTranslator(BaseTranslator):
             return Diff()
         elif parts == ["commit", "-a"]:
             return Commit(files=Commit.ALL, push=False)
+        elif parts == ["log"]:
+            return Log(branches=Log.CURRENT, files=Log.ALL)
         elif parts[0] == "remote":
             parts = parts[1:]
             if parts == ["-v"]:
@@ -86,10 +125,25 @@ class GitTranslator(BaseTranslator):
     def translate_status(self, command):
         return "git status"
 
+    def translate_log(self, command):
+        if command.files is not command.ALL or command.branches is not command.ALL:
+            return
+        return "git log --all"
+
+    def translate_help(self, command):
+        if command.useless:
+            raise CantHandle
+        return "git"
+
+    def translate_revert(self, command):
+        return "git checkout %s" % " ".join(f.path for f in command.files)
+
 class HgTranslator(BaseTranslator):
     def parse(self, command):
         parts = command.split()
-        if parts == ["pull"]:
+        if not parts:
+            return Help()
+        elif parts == ["pull"]:
             return Fetch()
         elif parts == ["commit"]:
             return Commit(files=Commit.ALL, push=False)
@@ -101,6 +155,16 @@ class HgTranslator(BaseTranslator):
             return Remote(verbose=True)
         elif parts == ["record"]:
             return Add(interactive=True, commit=True)
+        elif parts == ["init"]:
+            return Init()
+        elif parts == ["clone"]:
+            return Clone()
+        elif parts == ["status"]:
+            return Status()
+        elif parts == ["log"]:
+            return Log(branches=Log.ALL, files=Log.ALL)
+        elif parts[0] == "revert" and len(parts) == 2:
+            return Revert(files=[SomeFile(parts[1])])
 
     def translate_commit(self, command):
         if command.files is command.ALL:
@@ -135,9 +199,19 @@ class HgTranslator(BaseTranslator):
     def translate_remote(self, command):
         return "hg paths"
 
+    def translate_help(self, command):
+        if command.useless:
+            raise CantHandle
+        return "hg"
+
+    def translate_fetch(self, command):
+        return "hg pull"
+
 class SVNTranslator(BaseTranslator):
     def parse(self, command):
         parts = command.split()
+        if not parts:
+            return Help(useless=True)
         if parts in [["commit"], ["ci"]]:
             return Commit(files=Commit.ALL, push=True)
         elif parts in [["checkout"], ["co"]]:
@@ -170,8 +244,14 @@ class SVNTranslator(BaseTranslator):
     def translate_diff(self, command):
         return "svn diff"
 
+    def translate_log(self, command):
+        if command.branches is not command.CURRENT or command.files is not command.ALL:
+            return
+        return "svn log"
+
 class Translator(object):
     vcs = SortedDict([
+        ("bzr", BzrTranslator),
         ("git", GitTranslator),
         ("hg", HgTranslator),
         ("svn", SVNTranslator),
@@ -237,6 +317,7 @@ class SomeFile(object):
 
 class Command(object):
     ALL = object()
+    CURRENT = object()
 
 class Init(Command):
     pass
@@ -277,3 +358,12 @@ class Revert(Command):
 class Remote(Command):
     def __init__(self, verbose):
         self.verbose = verbose
+
+class Log(Command):
+    def __init__(self, branches, files):
+        self.branches = branches
+        self.files = files
+
+class Help(Command):
+    def __init__(self, useless=False):
+        self.useless = useless
