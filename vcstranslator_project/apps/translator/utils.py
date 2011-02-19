@@ -126,6 +126,8 @@ class GitTranslator(BaseTranslator):
         return "git status"
 
     def translate_log(self, command):
+        if command.outgoing:
+            return "git log origin..HEAD"
         if command.files is not command.ALL or command.branches is not command.ALL:
             return
         return "git log --all"
@@ -163,6 +165,8 @@ class HgTranslator(BaseTranslator):
             return Status()
         elif parts == ["log"]:
             return Log(branches=Log.ALL, files=Log.ALL)
+        elif parts == ["outgoing"]:
+            return Log(branches=Log.ALL, files=Log.ALL, outgoing=True)
         elif parts[0] == "revert" and len(parts) == 2:
             return Revert(files=[SomeFile(parts[1])])
 
@@ -360,9 +364,10 @@ class Remote(Command):
         self.verbose = verbose
 
 class Log(Command):
-    def __init__(self, branches, files):
+    def __init__(self, branches, files, outgoing=False):
         self.branches = branches
         self.files = files
+        self.outgoing = outgoing
 
 class Help(Command):
     def __init__(self, useless=False):

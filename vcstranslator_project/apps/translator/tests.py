@@ -72,6 +72,7 @@ class TranslatorTests(TestCase):
         self.assert_translates(t, "record", "git add -p && git commit")
         self.assert_translates(t, "log", "git log --all")
         self.assert_translates(t, "", "git")
+        self.assert_translates(t, "outgoing", "git log origin..HEAD")
 
     def test_git_to_hg(self):
         t = Translator("git", "hg")
